@@ -3,6 +3,8 @@
   #include <avr/power.h>
 #endif
 
+const uint8_t g_led_pins[] = {10, 11, 12};
+
 class Gate;
 class Tunnel;
 
@@ -29,33 +31,42 @@ const uint8_t g_gamma[256] =
 class Gate
 {
 public:
+    enum Sequment{LEFT, TOP, RIGHT, ALL};
+    enum Direction{NORMAL, REVERSE};
 
-    void set_color(uint32_t the_color)
+    Gate(){};
+    Gate(uint8_t *data_start, uint16_t num_left, uint16_t num_top, uint16_t num_right,
+         Direction the_dir);
+
+    inline void set_pixel(uint32_t the_index, uint32_t the_color)
     {
-        uint8_t *ptr = m_data,
-        *end_ptr = m_data + m_num_leds[0] + m_num_leds[1] + m_num_leds[2];
 
-        for(; ptr != end_ptr; ++ptr)
-        {
-            memcpy(ptr, &the_color, sizeof(the_color));
-        }
     }
+
+    void set_all_pixels(uint32_t the_color);
 
 private:
     uint8_t *m_data = nullptr;
-    uint16_t m_num_leds[3] = {0, 0, 0};
+    uint16_t m_num_leds[3] = {42, 42, 42};
+    Direction m_direction = NORMAL;
 };
 
 class Tunnel
 {
+public:
+
+    Tunnel();
+
+    void init();
+    uint8_t brightness() const;
+    void set_brightness(uint8_t the_brightness);
+
+    Gate* gates(){ return m_gates; }
+    const uint16_t num_gates() const { return sizeof(m_gates) / sizeof(Gate); }
+    void update();
+
 private:
 
     Gate m_gates[13];
-
-    Adafruit_NeoPixel m_strips[3] =
-    {
-        Adafruit_NeoPixel(NUM_LEDS, PIN, NEO_GRBW + NEO_KHZ800),
-        Adafruit_NeoPixel(NUM_LEDS, PIN, NEO_GRBW + NEO_KHZ800),
-        Adafruit_NeoPixel(NUM_LEDS, PIN, NEO_GRBW + NEO_KHZ800)
-    }
+    Adafruit_NeoPixel m_strips[3];
 };
