@@ -50,7 +50,7 @@ void update_tunnel()
 {
     // not working with current approach
     g_tunnel.set_brightness(50 * g_mic_lvl);
-    
+
     auto col = Adafruit_NeoPixel::Color(150, 255 * g_mic_lvl, 0, 20);
     g_tunnel.clear();
     g_tunnel.gates()[g_current_index].set_all_pixels(col);
@@ -67,7 +67,7 @@ void setup()
     // set ADC resolution (up to 12 bits (0 - 4095))
     analogReadResolution(12);
 
-    while(!Serial){ delay(10); }
+    // while(!Serial){ delay(10); }
     Serial.begin(115200);
 
     g_tunnel.init();
