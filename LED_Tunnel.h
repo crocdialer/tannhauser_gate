@@ -70,5 +70,5 @@ private:
 
     const uint16_t m_num_gates = 13;
     Gate m_gates[13];
-    Adafruit_NeoPixel m_strips[3];
+    Adafruit_NeoPixel* m_strips[3];
 };

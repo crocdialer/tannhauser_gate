@@ -1,0 +1,16 @@
+strip[0]: 536873616
+strip[1]: 536876168
+strip[2]: 536873616
+datastart(0): 536876136
+datastart(1): 536875632
+datastart(2): 536875128
+datastart(3): 536874624
+datastart(4): 536874120
+datastart(5): 536873616
+datastart(6): 536876168
+datastart(7): 536873616
+datastart(8): 536874120
+datastart(9): 536874624
+datastart(10): 536875128
+datastart(11): 536875632
+datastart(12): 536876136

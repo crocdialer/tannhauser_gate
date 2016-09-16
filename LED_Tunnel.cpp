@@ -7,18 +7,22 @@ Tunnel::Tunnel()
 
 void Tunnel::init()
 {
-    m_strips[0] = Adafruit_NeoPixel(6 * 3 * 42, g_led_pins[0], NEO_GRBW + NEO_KHZ800);
-    m_strips[1] = Adafruit_NeoPixel(42 + 34 + 42, g_led_pins[1], NEO_GRBW + NEO_KHZ800);
-    m_strips[2] = Adafruit_NeoPixel(6 * 3 * 42, g_led_pins[2], NEO_GRBW + NEO_KHZ800);
+    m_strips[0] = new Adafruit_NeoPixel(6 * 3 * 42, g_led_pins[0], NEO_GRBW + NEO_KHZ800);
+    m_strips[1] = new Adafruit_NeoPixel(42 + 34 + 42, g_led_pins[1], NEO_GRBW + NEO_KHZ800);
+    m_strips[2] = new Adafruit_NeoPixel(6 * 3 * 42, g_led_pins[2], NEO_GRBW + NEO_KHZ800);
     uint8_t* data_start[3];
+
+    char buf[128], *ptr = buf;
 
     for(uint8_t i = 0; i < 3; ++i)
     {
-        m_strips[i].begin();
-        m_strips[i].setBrightness(50);
-        m_strips[i].show(); // Initialize all pixels to 'off'
-        data_start[i] = (uint8_t*)m_strips[i].getPixels();
+        m_strips[i]->begin();
+        m_strips[i]->setBrightness(50);
+        m_strips[i]->show(); // Initialize all pixels to 'off'
+        data_start[i] = (uint8_t*)m_strips[i]->getPixels();
+        ptr += sprintf(ptr, "strip[%d]: %d\n", i, (int)data_start[i]);
     }
+    Serial.write(buf);
 
     const size_t gate_num_bytes = 3 * 42 * sizeof(uint32_t);
 
@@ -44,14 +48,14 @@ void Tunnel::init()
 
 uint8_t Tunnel::brightness() const
 {
-    return m_strips[0].getBrightness();
+    return m_strips[0]->getBrightness();
 }
 
 void Tunnel::set_brightness(uint8_t the_brightness)
 {
     for(uint8_t i = 0; i < 3; ++i)
     {
-        m_strips[i].setBrightness(the_brightness);
+        m_strips[i]->setBrightness(the_brightness);
     }
 }
 
@@ -65,7 +69,7 @@ void Tunnel::clear()
 
 void Tunnel::update()
 {
-    for(int i = 0; i < 3; ++i){ m_strips[i].show(); }
+    for(int i = 0; i < 3; ++i){ m_strips[i]->show(); }
 }
 
 Gate::Gate():

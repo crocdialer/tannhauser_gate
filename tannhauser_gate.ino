@@ -1,11 +1,30 @@
+#include "utils.h"
+#include "RunningMedian.h"
 #include "LED_Tunnel.h"
 
 // update rate in Hz
-#define UPDATE_RATE 2
+#define UPDATE_RATE 10
+
+// some pin defines
+#define DISTANCE_PIN A0
+#define MIC_PIN A1
 
 #define SERIAL_BUFSIZE 128
-uint8_t g_serial_buf[SERIAL_BUFSIZE];
+char g_serial_buf[SERIAL_BUFSIZE];
 uint32_t g_buf_index = 0;
+
+// mic sampling
+int g_mic_sample_window = 50;
+unsigned long g_mic_start_millis = 0;  // start of sample window
+volatile unsigned int g_mic_peak_to_peak = 0;   // peak-to-peak level
+unsigned int g_mic_signal_max = 0;
+unsigned int g_mic_signal_min = 4096;
+float g_mic_lvl = 0.f; // 0.0 ... 1.0
+
+// mic filtering
+const uint16_t g_num_samples = 3;
+const uint16_t g_sense_interval = 0;
+RunningMedian g_running_median = RunningMedian(g_num_samples);
 
 // helper variables for time measurement
 long g_last_time_stamp = 0;
@@ -29,8 +48,12 @@ BLACK = 0;
 
 void update_tunnel()
 {
+    // not working with current approach
+    g_tunnel.set_brightness(50 * g_mic_lvl);
+    
+    auto col = Adafruit_NeoPixel::Color(150, 255 * g_mic_lvl, 0, 20);
     g_tunnel.clear();
-    g_tunnel.gates()[g_current_index].set_all_pixels(PURPLE);
+    g_tunnel.gates()[g_current_index].set_all_pixels(col);
     g_current_index = (g_current_index + 1) % g_tunnel.num_gates();
     g_tunnel.update();
 }
@@ -41,17 +64,13 @@ void setup()
     pinMode(13, OUTPUT);
     digitalWrite(13, HIGH);
 
-    // while(!Serial){ delay(10); }
+    // set ADC resolution (up to 12 bits (0 - 4095))
+    analogReadResolution(12);
+
+    while(!Serial){ delay(10); }
     Serial.begin(115200);
 
     g_tunnel.init();
-
-    for(uint8_t i = 0; i < g_tunnel.num_gates(); i++)
-    {
-        // g_tunnel.gates()[i].set_all_pixels(0);
-        sprintf((char*)g_serial_buf, "datastart(%d): %d\n", (int)i, (int)(g_tunnel.gates()[i].data()));
-        Serial.print((const char*)g_serial_buf);
-    }
 }
 
 void loop()
@@ -61,18 +80,52 @@ void loop()
     g_last_time_stamp = millis();
     g_time_accum += delta_time;
 
+    // update current microphone value
+    process_mic_input();
+
     if(g_time_accum >= g_update_interval)
     {
-        // float delta_secs = g_time_accum / 1000.f;
         g_time_accum = 0;
 
         digitalWrite(13, g_indicator);
         g_indicator = !g_indicator;
-        // update_tunnel();
+
+        // update animation
+        update_tunnel();
 
         // read debug inputs
         process_serial_input();
+
+        // debug output
+        sprintf(g_serial_buf, "mic-lvl: %d\n", g_mic_peak_to_peak);
+        Serial.write(g_serial_buf);
     }
+}
+
+void process_mic_input()
+{
+  uint16_t sample;
+
+  // collect data from Analog0 (0 - 4095, 12 bit)
+  g_running_median.add(analogRead(MIC_PIN));
+  sample = g_running_median.getMedian();
+
+  if(sample < 4096)  // toss out spurious readings
+  {
+      g_mic_signal_min = min(g_mic_signal_min, sample);  // save just the min levels
+      g_mic_signal_max = max(g_mic_signal_max, sample);  // save just the max levels
+  }
+
+  if(millis() > g_mic_start_millis + g_mic_sample_window)
+  {
+      g_mic_peak_to_peak = g_mic_signal_max - g_mic_signal_min;  // max - min = peak-peak amplitude
+      g_mic_signal_max = 0;
+      g_mic_signal_min = 4096;
+      g_mic_start_millis = millis();
+
+      // read mic val
+      g_mic_lvl = map_value<float>(g_mic_peak_to_peak, 15.f, 80.f, 0.f, 1.f);
+  }
 }
 
 void process_serial_input()
@@ -101,8 +154,6 @@ void process_serial_input()
             {
                 g_tunnel.clear();
                 g_tunnel.gates()[index].set_all_pixels(ORANGE);
-                // g_tunnel.gates()[0].set_all_pixels(PURPLE);
-                // g_tunnel.gates()[index].set_pixel(0, ORANGE);
                 g_tunnel.update();
             }
             else
