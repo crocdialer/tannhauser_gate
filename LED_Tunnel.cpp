@@ -17,7 +17,7 @@ void Tunnel::init()
         m_strips[i].begin();
         m_strips[i].setBrightness(50);
         m_strips[i].show(); // Initialize all pixels to 'off'
-        data_start[i] = const_cast<uint8_t*>(m_strips[i].getPixels());
+        data_start[i] = (uint8_t*)m_strips[i].getPixels();
     }
 
     const size_t gate_num_bytes = 3 * 42 * sizeof(uint32_t);
@@ -55,28 +55,53 @@ void Tunnel::set_brightness(uint8_t the_brightness)
     }
 }
 
-void Tunnel::update()
+void Tunnel::clear()
 {
-    for(uint8_t i = 0; i < 3; ++i)
+    for(uint8_t i = 0; i < m_num_gates; i++)
     {
-        m_strips[i].show();
+        m_gates[i].set_all_pixels(0);
     }
 }
 
+void Tunnel::update()
+{
+    for(int i = 0; i < 3; ++i){ m_strips[i].show(); }
+}
+
+Gate::Gate():
+m_data(nullptr),
+m_num_leds(0),
+m_direction(NORMAL)
+{}
+
 Gate::Gate(uint8_t *data_start, uint16_t num_left, uint16_t num_top, uint16_t num_right,
-            Direction the_dir):
+           Direction the_dir):
 m_data(data_start),
-m_num_leds({num_left, num_top, num_right}),
+m_num_leds(num_left + num_top + num_right),
 m_direction(the_dir)
 {
+    m_seq_length[0] = num_left;
+    m_seq_length[1] = num_top;
+    m_seq_length[2] = num_right;
+}
 
+void Gate::set_pixel(uint32_t the_index, uint32_t the_color)
+{
+    if(m_data && the_index < m_num_leds)
+    {
+        the_index = m_direction == NORMAL ?
+            the_index : (m_num_leds - 1 - the_index);
+
+        uint32_t *ptr = (uint32_t*)m_data;
+        ptr[the_index] = the_color;
+    }
 }
 
 void Gate::set_all_pixels(uint32_t the_color)
 {
-    uint8_t *ptr = m_data,
-    *end_ptr = m_data + (m_num_leds[0] + m_num_leds[1] + m_num_leds[2]) * sizeof(uint32_t);
-    const size_t inc = sizeof(uint32_t);
+    if(!m_data) return;
+    uint32_t *ptr = (uint32_t*)m_data,
+    *end_ptr = ptr + m_num_leds;
 
-    for(; ptr < end_ptr; ptr += inc){ *((uint32_t*)ptr) = the_color; }
+    for(; ptr < end_ptr; ++ptr){ *ptr = the_color; }
 }

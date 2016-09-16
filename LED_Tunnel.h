@@ -34,20 +34,20 @@ public:
     enum Sequment{LEFT, TOP, RIGHT, ALL};
     enum Direction{NORMAL, REVERSE};
 
-    Gate(){};
+    Gate();
     Gate(uint8_t *data_start, uint16_t num_left, uint16_t num_top, uint16_t num_right,
          Direction the_dir);
 
-    inline void set_pixel(uint32_t the_index, uint32_t the_color)
-    {
-
-    }
-
+    //! WRGB byte order
+    void set_pixel(uint32_t the_index, uint32_t the_color);
     void set_all_pixels(uint32_t the_color);
+
+    const uint8_t* data() const { return m_data; };
 
 private:
     uint8_t *m_data = nullptr;
-    uint16_t m_num_leds[3] = {42, 42, 42};
+    uint16_t m_num_leds = 0;
+    uint16_t m_seq_length[3] = {42, 42, 42};
     Direction m_direction = NORMAL;
 };
 
@@ -60,13 +60,15 @@ public:
     void init();
     uint8_t brightness() const;
     void set_brightness(uint8_t the_brightness);
+    void clear();
 
     Gate* gates(){ return m_gates; }
-    const uint16_t num_gates() const { return sizeof(m_gates) / sizeof(Gate); }
+    const uint16_t num_gates() const { return m_num_gates; }
     void update();
 
 private:
 
+    const uint16_t m_num_gates = 13;
     Gate m_gates[13];
     Adafruit_NeoPixel m_strips[3];
 };
