@@ -19,11 +19,16 @@ static inline uint32_t fade_color(uint32_t the_color, uint8_t the_fade_value)
 
 Tunnel::Tunnel()
 {
-
+    memset(m_strips, 0, sizeof(m_strips));
 }
 
 void Tunnel::init()
 {
+    for(uint8_t i = 0; i < 3; ++i)
+    {
+        if(m_strips[i]){ delete m_strips[i]; m_strips[i] = nullptr; }
+    }
+
     m_strips[0] = new Adafruit_NeoPixel(6 * 3 * 42, g_led_pins[0], NEO_GRBW + NEO_KHZ800);
     m_strips[1] = new Adafruit_NeoPixel(42 + 34 + 42, g_led_pins[1], NEO_GRBW + NEO_KHZ800);
     m_strips[2] = new Adafruit_NeoPixel(6 * 3 * 42, g_led_pins[2], NEO_GRBW + NEO_KHZ800);
@@ -61,6 +66,12 @@ void Tunnel::init()
     m_gates[10] = Gate(data_start[2] + 3 * gate_num_bytes, 42, 42, 42, Gate::REVERSE);
     m_gates[11] = Gate(data_start[2] + 4 * gate_num_bytes, 42, 42, 42, Gate::NORMAL);
     m_gates[12] = Gate(data_start[2] + 5 * gate_num_bytes, 42, 42, 42, Gate::REVERSE);
+
+    m_num_leds = 0;
+    for(uint32_t i = 0; i < m_num_gates; ++i){ m_num_leds += m_gates[i].num_leds(); }
+    if(m_pixel_time_buf){ delete[] m_pixel_time_buf; }
+    m_pixel_time_buf = new uint32_t[m_num_leds];
+    memset(m_pixel_time_buf, 0, m_num_leds * sizeof(uint32_t));
 }
 
 uint8_t Tunnel::brightness() const
@@ -81,8 +92,27 @@ void Tunnel::clear()
     }
 }
 
-void Tunnel::update()
+void Tunnel::update(uint32_t the_delta_time)
 {
+    uint32_t pix_idx = 0;
+    uint32_t time_stamp = millis();
+
+    // iterate timestamp array and set pixel colors
+    for(uint32_t i = 0; i < m_num_gates; i++)
+    {
+        uint32_t num_gate_leds = m_gates[i].num_leds();
+        uint32_t *gate_data = (uint32_t*)m_gates[i].data();
+
+        for(uint32_t j = 0; j < num_gate_leds; j++)
+        {
+            if(m_pixel_time_buf[pix_idx] > time_stamp)
+            {
+                gate_data[j] = ORANGE;
+            }
+            pix_idx++;
+        }
+    }
+
     for(int i = 0; i < 3; ++i){ m_strips[i]->show(); }
 }
 
@@ -124,4 +154,19 @@ void Gate::set_all_pixels(uint32_t the_color)
     *end_ptr = ptr + m_num_leds;
 
     for(; ptr < end_ptr; ++ptr){ *ptr = the_color; }
+}
+
+void Tunnel::add_random_pixels(uint16_t the_count, uint32_t the_delay_millis)
+{
+    if(!m_pixel_time_buf){ return; }
+
+    long time_stamp = millis();
+    const uint16_t num_pixels = 8;
+
+    for(uint16_t i = 0; i < the_count; i++)
+    {
+        int rnd_index = random<int>(0, num_pixels);
+        int rnd_time = random<int>(- the_delay_millis / 2, the_delay_millis / 2);
+        m_pixel_time_buf[rnd_index] = time_stamp + the_delay_millis + rnd_time;
+    }
 }

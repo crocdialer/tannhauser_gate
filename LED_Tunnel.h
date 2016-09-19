@@ -28,6 +28,13 @@ const uint8_t g_gamma[256] =
   215,218,220,223,225,228,231,233,236,239,241,244,247,249,252,255
 };
 
+// Color defines (BRGW)
+static const uint32_t
+WHITE = Adafruit_NeoPixel::Color(0, 0, 0, 255),
+PURPLE = Adafruit_NeoPixel::Color(150, 235, 0, 20),
+ORANGE = Adafruit_NeoPixel::Color(0, 255, 50, 40),
+BLACK = 0;
+
 class Gate
 {
 public:
@@ -43,6 +50,8 @@ public:
     void set_all_pixels(uint32_t the_color);
 
     const uint8_t* data() const { return m_data; };
+
+    const uint16_t num_leds() const { return m_num_leds; }
 
 private:
     uint8_t *m_data = nullptr;
@@ -61,14 +70,19 @@ public:
     uint8_t brightness() const;
     void set_brightness(uint8_t the_brightness);
     void clear();
+    void add_random_pixels(uint16_t the_count, uint32_t the_delay_millis);
 
     Gate* gates(){ return m_gates; }
     const uint16_t num_gates() const { return m_num_gates; }
-    void update();
+    void update(uint32_t the_delta_time);
 
 private:
 
     const uint16_t m_num_gates = 13;
     Gate m_gates[13];
     Adafruit_NeoPixel* m_strips[3];
+
+    // timestamps for every pixel, needed for random blinky
+    uint32_t *m_pixel_time_buf = nullptr;
+    uint32_t m_num_leds = 0;
 };
