@@ -6,8 +6,12 @@
 #define UPDATE_RATE 10
 
 // some pin defines
-#define DISTANCE_PIN A0
+#define DISTANCE_INTERRUPT_PIN A0
 #define MIC_PIN A1
+#define POTI_PIN A2
+
+#define ADC_BITS 12
+const float ADC_MAX = (1 << ADC_BITS) - 1.f;
 
 #define SERIAL_BUFSIZE 128
 char g_serial_buf[SERIAL_BUFSIZE];
@@ -29,6 +33,7 @@ RunningMedian g_running_median = RunningMedian(g_num_samples);
 // helper variables for time measurement
 long g_last_time_stamp = 0;
 uint32_t g_time_accum = 0;
+unsigned long *g_pixel_time_buf = nullptr;
 
 // update interval in millis
 const int g_update_interval = 1000 / UPDATE_RATE;
@@ -45,6 +50,17 @@ WHITE = Adafruit_NeoPixel::Color(0, 0, 0, 255),
 PURPLE = Adafruit_NeoPixel::Color(150, 235, 0, 20),
 ORANGE = Adafruit_NeoPixel::Color(0, 255, 50, 40),
 BLACK = 0;
+
+// lightbarrier handling
+volatile bool g_barrier_lock = false;
+volatile long g_barrier_timestamp = 0;
+
+void barrier_ISR()
+{
+     g_barrier_lock = digitalRead(DISTANCE_INTERRUPT_PIN);
+     if(g_barrier_lock){ g_barrier_timestamp = millis(); }
+}
+
 
 void update_tunnel()
 {
@@ -64,8 +80,12 @@ void setup()
     pinMode(13, OUTPUT);
     digitalWrite(13, HIGH);
 
-    // set ADC resolution (up to 12 bits (0 - 4095))
-    analogReadResolution(12);
+    // interrupt from lightbarrier
+    pinMode(DISTANCE_INTERRUPT_PIN, INPUT);
+    attachInterrupt(DISTANCE_INTERRUPT_PIN, barrier_ISR, CHANGE);
+
+    // set ADC resolution (default 10 bits, maximum 12 bits)
+    analogReadResolution(ADC_BITS);
 
     // while(!Serial){ delay(10); }
     Serial.begin(115200);
@@ -97,34 +117,48 @@ void loop()
         process_serial_input();
 
         // debug output
-        sprintf(g_serial_buf, "mic-lvl: %d\n", g_mic_peak_to_peak);
-        Serial.write(g_serial_buf);
+        // sprintf(g_serial_buf, "mic-lvl: %d\n", g_mic_peak_to_peak);
+        // Serial.write(g_serial_buf);
     }
 }
 
 void process_mic_input()
 {
-  uint16_t sample;
+    int sample  = analogRead(MIC_PIN);
 
-  // collect data from Analog0 (0 - 4095, 12 bit)
-  g_running_median.add(analogRead(MIC_PIN));
-  sample = g_running_median.getMedian();
+    // toss out spurious readings
+    if(sample <= ADC_MAX)
+    {
+        g_mic_signal_min = min(g_mic_signal_min, sample);  // save just the min levels
+        g_mic_signal_max = max(g_mic_signal_max, sample);  // save just the max levels
+    }
 
-  if(sample < 4096)  // toss out spurious readings
+    if(millis() > g_mic_start_millis + g_mic_sample_window)
+    {
+        g_mic_peak_to_peak = g_mic_signal_max - g_mic_signal_min;  // max - min = peak-peak amplitude
+        g_mic_signal_max = 0;
+        g_mic_signal_min = ADC_MAX;
+        g_mic_start_millis = millis();
+        g_mic_lvl *= .96f;
+
+        const uint32_t thresh = 15;
+
+        // read mic val
+        float v = map_value<float>(g_mic_peak_to_peak, thresh, 200, 0.f, 1.f);
+        g_mic_lvl = max(g_mic_lvl, smoothstep(0.f, 1.f, v));
+    }
+}
+
+void add_random_pixels(uint16_t the_count, uint32_t the_delay_millis)
+{
+  long time_stamp = millis();
+  const uint16_t num_pixels = 8;
+
+  for(uint16_t i = 0; i < the_count; i++)
   {
-      g_mic_signal_min = min(g_mic_signal_min, sample);  // save just the min levels
-      g_mic_signal_max = max(g_mic_signal_max, sample);  // save just the max levels
-  }
-
-  if(millis() > g_mic_start_millis + g_mic_sample_window)
-  {
-      g_mic_peak_to_peak = g_mic_signal_max - g_mic_signal_min;  // max - min = peak-peak amplitude
-      g_mic_signal_max = 0;
-      g_mic_signal_min = 4096;
-      g_mic_start_millis = millis();
-
-      // read mic val
-      g_mic_lvl = map_value<float>(g_mic_peak_to_peak, 15.f, 80.f, 0.f, 1.f);
+    int rnd_index = random<int>(0, num_pixels);
+    int rnd_time = random<int>(- the_delay_millis / 2, the_delay_millis / 2);
+    g_time_buf[rnd_x + 8 * rnd_y] = time_stamp + the_delay_millis + rnd_time;
   }
 }
 
@@ -155,14 +189,6 @@ void process_serial_input()
                 g_tunnel.clear();
                 g_tunnel.gates()[index].set_all_pixels(ORANGE);
                 g_tunnel.update();
-            }
-            else
-            {
-                for(uint8_t i = 0; i < g_tunnel.num_gates(); i++)
-                {
-                    g_tunnel.gates()[i].set_all_pixels(ORANGE);
-                    g_tunnel.update();
-                }
             }
         }
     }

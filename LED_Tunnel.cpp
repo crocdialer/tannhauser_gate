@@ -1,4 +1,21 @@
 #include "LED_Tunnel.h"
+#include "utils.h"
+
+//! the default-value will cause no brightness adjustment
+uint8_t g_brightness = 0;
+static const uint8_t r_offset = 1, g_offset = 0, b_offset = 2, w_offset = 3;
+
+static inline uint32_t fade_color(uint32_t the_color, uint8_t the_fade_value)
+{
+    if(!the_fade_value){ return 0; }
+    if(the_fade_value == 0xFF){ return the_color; }
+    float val = clamp<float>(the_fade_value / 255.f, 0.f, 1.f);
+    uint8_t *ptr = (uint8_t*) &the_color;
+    return  (uint32_t)(ptr[w_offset] * val) << 24 |
+            (uint32_t)(ptr[b_offset] * val) << 16 |
+            (uint32_t)(ptr[r_offset] * val) << 8 |
+            (uint32_t)(ptr[g_offset] * val);
+}
 
 Tunnel::Tunnel()
 {
@@ -22,7 +39,7 @@ void Tunnel::init()
         data_start[i] = (uint8_t*)m_strips[i]->getPixels();
         ptr += sprintf(ptr, "strip[%d]: %d\n", i, (int)data_start[i]);
     }
-    Serial.write(buf);
+    // Serial.write(buf);
 
     const size_t gate_num_bytes = 3 * 42 * sizeof(uint32_t);
 
@@ -48,15 +65,12 @@ void Tunnel::init()
 
 uint8_t Tunnel::brightness() const
 {
-    return m_strips[0]->getBrightness();
+    return g_brightness;
 }
 
 void Tunnel::set_brightness(uint8_t the_brightness)
 {
-    for(uint8_t i = 0; i < 3; ++i)
-    {
-        m_strips[i]->setBrightness(the_brightness);
-    }
+    g_brightness = the_brightness;
 }
 
 void Tunnel::clear()
@@ -96,6 +110,7 @@ void Gate::set_pixel(uint32_t the_index, uint32_t the_color)
         the_index = m_direction == NORMAL ?
             the_index : (m_num_leds - 1 - the_index);
 
+        the_color = fade_color(the_color, g_brightness);
         uint32_t *ptr = (uint32_t*)m_data;
         ptr[the_index] = the_color;
     }
@@ -104,6 +119,7 @@ void Gate::set_pixel(uint32_t the_index, uint32_t the_color)
 void Gate::set_all_pixels(uint32_t the_color)
 {
     if(!m_data) return;
+    the_color = fade_color(the_color, g_brightness);
     uint32_t *ptr = (uint32_t*)m_data,
     *end_ptr = ptr + m_num_leds;
 
