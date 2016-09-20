@@ -1,4 +1,5 @@
 #include "utils.h"
+#include "ADC_Sampler.h"
 #include "RunningMedian.h"
 #include "LED_Tunnel.h"
 
@@ -9,26 +10,24 @@
 #define BARRIER_INTERRUPT_PIN A0
 #define MIC_PIN A1
 #define POTI_PIN A2
+#define ADC_BITS 10
+#define SERIAL_BUFSIZE 128
 
-#define ADC_BITS 12
 const float ADC_MAX = (1 << ADC_BITS) - 1.f;
 
-#define SERIAL_BUFSIZE 128
 char g_serial_buf[SERIAL_BUFSIZE];
 uint32_t g_buf_index = 0;
 
 // mic sampling
-int g_mic_sample_window = 50;
-unsigned long g_mic_start_millis = 0;  // start of sample window
-volatile unsigned int g_mic_peak_to_peak = 0;   // peak-to-peak level
-unsigned int g_mic_signal_max = 0;
-unsigned int g_mic_signal_min = 4096;
+const uint32_t g_mic_sample_window = 50;
+uint32_t g_mic_start_millis = 0;  // start of sample window
+uint32_t g_mic_peak_to_peak = 0;   // peak-to-peak level
+volatile uint32_t g_mic_signal_max = 0;
+volatile uint32_t g_mic_signal_min = ADC_MAX;
 float g_mic_lvl = 0.f; // 0.0 ... 1.0
 
-// mic filtering
-const uint16_t g_num_samples = 3;
-const uint16_t g_sense_interval = 0;
-RunningMedian g_running_median = RunningMedian(g_num_samples);
+// continuous sampling with timer interrupts and custom ADC settings
+ADC_Sampler g_adc_sampler;
 
 // helper variables for time measurement
 long g_last_time_stamp = 0;
@@ -56,13 +55,22 @@ enum RunMode
     MODE_DEBUG
 } g_run_mode = MODE_NORMAL;
 
+//! value callback from ADC_Sampler ISR
+void adc_callback(uint32_t the_sample)
+{
+    if(the_sample <= ADC_MAX)
+    {
+        g_mic_signal_min = min(g_mic_signal_min, the_sample);
+        g_mic_signal_max = max(g_mic_signal_max, the_sample);
+    }
+}
+
 //! interrupt routine for lightbarrier status
 void barrier_ISR()
 {
      g_barrier_lock = digitalRead(BARRIER_INTERRUPT_PIN);
      if(g_barrier_lock){ g_barrier_timestamp = millis(); }
 }
-
 
 void update_tunnel(uint32_t the_delta_time)
 {
@@ -72,6 +80,10 @@ void update_tunnel(uint32_t the_delta_time)
     auto col = Adafruit_NeoPixel::Color(150, 255 * g_mic_lvl, 0, g_gamma[40]);
     g_tunnel.clear();
     g_tunnel.gates()[g_current_index].set_all_pixels(col);
+
+    uint32_t num_random_pix = 200/*per sec*/ * 4.f /*gain*/ * the_delta_time / 1000.f * g_mic_lvl;
+    g_tunnel.add_random_pixels(num_random_pix, 600);
+
     g_current_index = (g_current_index + 1) % g_tunnel.num_gates();
     g_tunnel.update(the_delta_time);
 }
@@ -91,6 +103,10 @@ void setup()
 
     // while(!Serial){ delay(10); }
     Serial.begin(115200);
+
+    // start mic sampling
+    g_adc_sampler.set_adc_callback(&adc_callback);
+    g_adc_sampler.begin(MIC_PIN, 22200);
 
     g_tunnel.init();
 }
@@ -131,28 +147,20 @@ void loop()
 
 void process_mic_input()
 {
-    int sample  = analogRead(MIC_PIN);
-
-    // toss out spurious readings
-    if(sample <= ADC_MAX)
-    {
-        g_mic_signal_min = min(g_mic_signal_min, sample);  // save just the min levels
-        g_mic_signal_max = max(g_mic_signal_max, sample);  // save just the max levels
-    }
-
     if(millis() > g_mic_start_millis + g_mic_sample_window)
     {
         g_mic_peak_to_peak = g_mic_signal_max - g_mic_signal_min;  // max - min = peak-peak amplitude
         g_mic_signal_max = 0;
         g_mic_signal_min = ADC_MAX;
         g_mic_start_millis = millis();
-        g_mic_lvl *= .96f;
+        g_mic_lvl *= .95f;
 
-        const uint32_t thresh = 15;
+        const uint32_t thresh = 4;
+        g_mic_peak_to_peak = g_mic_peak_to_peak < thresh ? 0 : g_mic_peak_to_peak;
 
         // read mic val
-        float v = map_value<float>(g_mic_peak_to_peak, thresh, 200, 0.f, 1.f);
-        g_mic_lvl = max(g_mic_lvl, smoothstep(0.f, 1.f, v));
+        float v = clamp<float>(g_mic_peak_to_peak / 80.f, 0.f, 1.f);
+        g_mic_lvl = max(g_mic_lvl, v);
     }
 }
 
@@ -183,7 +191,7 @@ void process_serial_input()
                 g_run_mode = MODE_DEBUG;
                 g_tunnel.clear();
                 g_tunnel.gates()[index].set_all_pixels(ORANGE);
-                g_tunnel.update(33);
+                g_tunnel.update(0);
             }
             else{ g_run_mode = MODE_NORMAL; }
         }

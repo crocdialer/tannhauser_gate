@@ -2,6 +2,13 @@
 
 #include "Arduino.h"
 
+class no_interrupt
+{
+public:
+    no_interrupt(){ noInterrupts(); }
+    ~no_interrupt(){ interrupts(); }
+};
+
 template <typename T>
 void fmt_real_to_str(char *buf, T val, uint32_t precision = 3)
 {
