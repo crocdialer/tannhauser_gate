@@ -75,14 +75,15 @@ void barrier_ISR()
 void update_tunnel(uint32_t the_delta_time)
 {
     // not working with current approach
-    g_tunnel.set_brightness(50 * g_mic_lvl);
+    g_tunnel.set_brightness(20 + 50 * g_mic_lvl);
 
     auto col = Adafruit_NeoPixel::Color(150, 255 * g_mic_lvl, 0, g_gamma[40]);
     g_tunnel.clear();
     g_tunnel.gates()[g_current_index].set_all_pixels(col);
 
-    uint32_t num_random_pix = 200/*per sec*/ * 4.f /*gain*/ * the_delta_time / 1000.f * g_mic_lvl;
+    uint32_t num_random_pix = 200/*per sec*/ * the_delta_time / 1000.f * g_mic_lvl;
     g_tunnel.add_random_pixels(num_random_pix, 600);
+    // Serial.print("num_random_pix: "); Serial.println(num_random_pix);
 
     g_current_index = (g_current_index + 1) % g_tunnel.num_gates();
     g_tunnel.update(the_delta_time);
@@ -119,12 +120,10 @@ void loop()
     g_time_accum += delta_time;
 
     // update current microphone value
-    process_mic_input();
+    process_mic_input(delta_time);
 
     if(g_time_accum >= g_update_interval)
     {
-        g_time_accum = 0;
-
         digitalWrite(13, g_indicator);
         g_indicator = !g_indicator;
 
@@ -132,7 +131,7 @@ void loop()
         {
             case MODE_NORMAL:
             // update animation
-            update_tunnel(delta_time);
+            update_tunnel(g_time_accum);
             break;
         }
 
@@ -142,18 +141,24 @@ void loop()
         // debug output
         // sprintf(g_serial_buf, "mic-lvl: %d\n", g_mic_peak_to_peak);
         // Serial.write(g_serial_buf);
+
+        // clear time accumulator
+        g_time_accum = 0;
     }
 }
 
-void process_mic_input()
+void process_mic_input(uint32_t the_delta_time)
 {
+    // decay
+    float decay = 1.f * the_delta_time / 1000.f;
+    g_mic_lvl = max(0, g_mic_lvl - decay);
+
     if(millis() > g_mic_start_millis + g_mic_sample_window)
     {
         g_mic_peak_to_peak = g_mic_signal_max - g_mic_signal_min;  // max - min = peak-peak amplitude
         g_mic_signal_max = 0;
         g_mic_signal_min = ADC_MAX;
         g_mic_start_millis = millis();
-        g_mic_lvl *= .95f;
 
         const uint32_t thresh = 4;
         g_mic_peak_to_peak = g_mic_peak_to_peak < thresh ? 0 : g_mic_peak_to_peak;

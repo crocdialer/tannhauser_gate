@@ -83,6 +83,6 @@ private:
     Adafruit_NeoPixel* m_strips[3];
 
     // timestamps for every pixel, needed for random blinky
-    uint32_t *m_pixel_time_buf = nullptr;
+    unsigned long *m_pixel_time_buf = nullptr;
     uint32_t m_num_leds = 0;
 };
