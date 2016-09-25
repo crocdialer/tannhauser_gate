@@ -63,3 +63,44 @@ inline float smoothstep(float edge0, float edge1, float x)
     float t = clamp<float>((x - edge0) / (edge1 - edge0), 0.f, 1.f);
     return t * t * (3.0 - 2.0 * t);
 }
+
+static const uint8_t r_offset = 1, g_offset = 0, b_offset = 2, w_offset = 3;
+
+static inline uint32_t fade_color(uint32_t the_color, float the_fade_value)
+{
+    float val = clamp<float>(the_fade_value, 0.f, 1.f);
+
+    uint8_t *ptr = (uint8_t*) &the_color;
+    return  (uint32_t)(ptr[w_offset] * val) << 24 |
+            (uint32_t)(ptr[b_offset] * val) << 16 |
+            (uint32_t)(ptr[r_offset] * val) << 8 |
+            (uint32_t)(ptr[g_offset] * val);
+}
+
+static inline uint32_t color_mix(uint32_t lhs, uint32_t rhs, float ratio)
+{
+    uint8_t *ptr_lhs = (uint8_t*) &lhs, *ptr_rhs = (uint8_t*) &rhs;
+
+    return  (uint32_t)mix<float>(ptr_lhs[w_offset], ptr_rhs[w_offset], ratio) << 24 |
+            (uint32_t)mix<float>(ptr_lhs[b_offset], ptr_rhs[b_offset], ratio) << 16 |
+            (uint32_t)mix<float>(ptr_lhs[r_offset], ptr_rhs[r_offset], ratio) << 8 |
+            (uint32_t)mix<float>(ptr_lhs[g_offset], ptr_rhs[g_offset], ratio);
+}
+
+static inline uint32_t color_add(uint32_t lhs, uint32_t rhs)
+{
+    uint8_t *ptr_lhs = (uint8_t*) &lhs, *ptr_rhs = (uint8_t*) &rhs;
+    return  min((uint32_t)ptr_lhs[w_offset] + (uint32_t)ptr_rhs[w_offset], 255) << 24 |
+            min((uint32_t)ptr_lhs[b_offset] + (uint32_t)ptr_rhs[b_offset], 255) << 16 |
+            min((uint32_t)ptr_lhs[r_offset] + (uint32_t)ptr_rhs[r_offset], 255) << 8 |
+            min((uint32_t)ptr_lhs[g_offset] + (uint32_t)ptr_rhs[g_offset], 255);
+}
+
+static inline void print_color(uint32_t the_color)
+{
+    char buf[32];
+    uint8_t *ptr = (uint8_t*) &the_color;
+    sprintf(buf, "R: %d - G: %d - B: %d - W: %d\n", ptr[r_offset], ptr[g_offset],
+            ptr[b_offset], ptr[w_offset]);
+    Serial.write(buf);
+}

@@ -1,10 +1,10 @@
 #include "utils.h"
 #include "ADC_Sampler.h"
-#include "RunningMedian.h"
 #include "LED_Tunnel.h"
+#include "WaveSimulation.h"
 
 // update rate in Hz
-#define UPDATE_RATE 10
+#define UPDATE_RATE 60
 
 // some pin defines
 #define BARRIER_INTERRUPT_PIN A0
@@ -25,6 +25,7 @@ uint32_t g_mic_peak_to_peak = 0;   // peak-to-peak level
 volatile uint32_t g_mic_signal_max = 0;
 volatile uint32_t g_mic_signal_min = ADC_MAX;
 float g_mic_lvl = 0.f; // 0.0 ... 1.0
+float g_gain = 10.f;
 
 // continuous sampling with timer interrupts and custom ADC settings
 ADC_Sampler g_adc_sampler;
@@ -51,9 +52,15 @@ volatile long g_barrier_timestamp = 0;
 //! define our run-modes here
 enum RunMode
 {
-    MODE_NORMAL,
-    MODE_DEBUG
-} g_run_mode = MODE_NORMAL;
+    MODE_SPARKLE = 1 << 0,
+    MODE_WAVES = 1 << 1,
+    MODE_NEBULA = 1 << 2,
+    MODE_DEBUG = 1 << 3
+};
+uint32_t g_run_mode = MODE_SPARKLE | MODE_WAVES;
+
+// our wave simulation object
+WaveSimulation g_wave_sim;
 
 //! value callback from ADC_Sampler ISR
 void adc_callback(uint32_t the_sample)
@@ -72,21 +79,32 @@ void barrier_ISR()
      if(g_barrier_lock){ g_barrier_timestamp = millis(); }
 }
 
-void update_tunnel(uint32_t the_delta_time)
+void update_sparkling(uint32_t the_delta_time)
 {
-    // not working with current approach
-    g_tunnel.set_brightness(20 + 50 * g_mic_lvl);
-
-    auto col = Adafruit_NeoPixel::Color(150, 255 * g_mic_lvl, 0, g_gamma[40]);
-    g_tunnel.clear();
-    g_tunnel.gates()[g_current_index].set_all_pixels(col);
-
-    uint32_t num_random_pix = 200/*per sec*/ * the_delta_time / 1000.f * g_mic_lvl;
+    uint32_t num_random_pix = g_gain * g_mic_lvl * 200/*per sec*/ * the_delta_time / 1000.f;
     g_tunnel.add_random_pixels(num_random_pix, 600);
     // Serial.print("num_random_pix: "); Serial.println(num_random_pix);
+}
 
-    g_current_index = (g_current_index + 1) % g_tunnel.num_gates();
-    g_tunnel.update(the_delta_time);
+void update_waves(uint32_t the_delta_time)
+{
+    // update wave simulation
+    g_wave_sim.update(the_delta_time);
+
+    // g_tunnel.set_brightness(20 + 50 * g_mic_lvl);
+    auto col = Adafruit_NeoPixel::Color(150, 255 * g_mic_lvl, 0, g_gamma[40]);
+
+    const float step = 0.88f;
+
+    // start bias for 1st gate
+    float pos_x = 0.3;
+
+    for(int i = 0; i < g_tunnel.num_gates(); i++)
+    {
+        auto fade_col = fade_color(col, g_wave_sim.intensity_at_position(pos_x));
+        g_tunnel.gates()[i].set_all_pixels(fade_col);
+        pos_x += step;
+    }
 }
 
 void setup()
@@ -107,7 +125,7 @@ void setup()
 
     // start mic sampling
     g_adc_sampler.set_adc_callback(&adc_callback);
-    g_adc_sampler.begin(MIC_PIN, 22200);
+    g_adc_sampler.begin(MIC_PIN, 22050);
 
     g_tunnel.init();
 }
@@ -127,13 +145,16 @@ void loop()
         digitalWrite(13, g_indicator);
         g_indicator = !g_indicator;
 
-        switch(g_run_mode)
+        g_tunnel.clear();
+
+        if(g_run_mode & MODE_WAVES)
         {
-            case MODE_NORMAL:
-            // update animation
-            update_tunnel(g_time_accum);
-            break;
+            g_wave_sim.emit_wave();
+            update_waves(g_time_accum);
         }
+        if(g_run_mode & MODE_SPARKLE){ update_sparkling(g_time_accum); }
+
+        g_tunnel.update(delta_time);
 
         // read debug inputs
         process_serial_input();
@@ -160,11 +181,10 @@ void process_mic_input(uint32_t the_delta_time)
         g_mic_signal_min = ADC_MAX;
         g_mic_start_millis = millis();
 
-        const uint32_t thresh = 4;
-        g_mic_peak_to_peak = g_mic_peak_to_peak < thresh ? 0 : g_mic_peak_to_peak;
+        g_mic_peak_to_peak = max(0, g_mic_peak_to_peak - 2);
 
         // read mic val
-        float v = clamp<float>(g_mic_peak_to_peak / 80.f, 0.f, 1.f);
+        float v = clamp<float>(g_mic_peak_to_peak / 100.f, 0.f, 1.f);
         g_mic_lvl = max(g_mic_lvl, v);
     }
 }
@@ -198,7 +218,7 @@ void process_serial_input()
                 g_tunnel.gates()[index].set_all_pixels(ORANGE);
                 g_tunnel.update(0);
             }
-            else{ g_run_mode = MODE_NORMAL; }
+            else{ g_run_mode = MODE_SPARKLE | MODE_WAVES; }
         }
     }
 }

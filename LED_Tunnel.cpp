@@ -2,30 +2,7 @@
 #include "utils.h"
 
 //! the default-value will cause no brightness adjustment
-uint8_t g_brightness = 0;
-static const uint8_t r_offset = 1, g_offset = 0, b_offset = 2, w_offset = 3;
-
-static inline uint32_t fade_color(uint32_t the_color, uint8_t the_fade_value)
-{
-    if(!the_fade_value){ return 0; }
-    if(the_fade_value == 0xFF){ return the_color; }
-    float val = clamp<float>(the_fade_value / 255.f, 0.f, 1.f);
-    uint8_t *ptr = (uint8_t*) &the_color;
-    return  (uint32_t)(ptr[w_offset] * val) << 24 |
-            (uint32_t)(ptr[b_offset] * val) << 16 |
-            (uint32_t)(ptr[r_offset] * val) << 8 |
-            (uint32_t)(ptr[g_offset] * val);
-}
-
-static inline uint32_t mix_colors(uint32_t lhs, uint32_t rhs, float ratio)
-{
-    uint8_t *ptr_lhs = (uint8_t*) &lhs, *ptr_rhs = (uint8_t*) &rhs;
-
-    return  (uint32_t)mix<float>(ptr_lhs[w_offset], ptr_rhs[w_offset], ratio) << 24 |
-            (uint32_t)mix<float>(ptr_lhs[b_offset], ptr_rhs[b_offset], ratio) << 16 |
-            (uint32_t)mix<float>(ptr_lhs[r_offset], ptr_rhs[r_offset], ratio) << 8 |
-            (uint32_t)mix<float>(ptr_lhs[g_offset], ptr_rhs[g_offset], ratio);
-}
+uint8_t g_brightness = 255;
 
 Tunnel::Tunnel()
 {
@@ -130,7 +107,7 @@ void Tunnel::update(uint32_t the_delta_time)
         {
             if(m_pixel_time_buf[pix_idx] > time_stamp)
             {
-                gate_data[j] = ORANGE;
+                gate_data[j] = gate_data[j] ? color_add(gate_data[j], ORANGE) : ORANGE;
             }
             pix_idx++;
         }
@@ -162,7 +139,7 @@ void Gate::set_pixel(uint32_t the_index, uint32_t the_color)
         the_index = m_direction == NORMAL ?
             the_index : (m_num_leds - 1 - the_index);
 
-        the_color = fade_color(the_color, g_brightness);
+        the_color = fade_color(the_color, g_brightness / 255.f);
         uint32_t *ptr = (uint32_t*)m_data;
         ptr[the_index] = the_color;
     }
@@ -171,7 +148,7 @@ void Gate::set_pixel(uint32_t the_index, uint32_t the_color)
 void Gate::set_all_pixels(uint32_t the_color)
 {
     if(!m_data) return;
-    the_color = fade_color(the_color, g_brightness);
+    the_color = fade_color(the_color, g_brightness / 255.f);
     uint32_t *ptr = (uint32_t*)m_data,
     *end_ptr = ptr + m_num_leds;
 
