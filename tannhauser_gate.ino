@@ -62,6 +62,11 @@ uint32_t g_run_mode = MODE_SPARKLE | MODE_WAVES;
 // our wave simulation object
 WaveSimulation g_wave_sim;
 
+// disabled when set to 0
+int32_t g_random_wave_timer = 1;
+
+const uint32_t g_idle_timeout = 10000;
+
 //! value callback from ADC_Sampler ISR
 void adc_callback(uint32_t the_sample)
 {
@@ -81,7 +86,7 @@ void barrier_ISR()
 
 void update_sparkling(uint32_t the_delta_time)
 {
-    uint32_t num_random_pix = g_gain * g_mic_lvl * 200/*per sec*/ * the_delta_time / 1000.f;
+    uint32_t num_random_pix = g_mic_lvl * 600/*per sec*/ * the_delta_time / 1000.f;
     g_tunnel.add_random_pixels(num_random_pix, 600);
     // Serial.print("num_random_pix: "); Serial.println(num_random_pix);
 }
@@ -91,13 +96,27 @@ void update_waves(uint32_t the_delta_time)
     // update wave simulation
     g_wave_sim.update(the_delta_time);
 
+    g_random_wave_timer -= g_time_accum;
+
+    // idle timeout and wave timer elapsed
+    if(millis() - g_barrier_timestamp > g_idle_timeout &&
+       g_random_wave_timer < 0)
+    {
+        // emit wave
+        g_wave_sim.emit_wave(random<float>(0.5f, 1.f));
+
+        // schedule next wave
+        g_random_wave_timer = random<int32_t>(500, 5000);
+    }
+
     // g_tunnel.set_brightness(20 + 50 * g_mic_lvl);
-    auto col = Adafruit_NeoPixel::Color(150, 255 * g_mic_lvl, 0, g_gamma[40]);
+    auto col = Adafruit_NeoPixel::Color(150, 0, 0, g_gamma[40]);
 
-    const float step = 0.88f;
-
-    // start bias for 1st gate
+    // start bias for 1st gate in meters
     float pos_x = 0.3;
+
+    // distance between two gates in meters
+    const float step = 0.88f;
 
     for(int i = 0; i < g_tunnel.num_gates(); i++)
     {
@@ -142,26 +161,25 @@ void loop()
 
     if(g_time_accum >= g_update_interval)
     {
+        // flash red indicator LED
         digitalWrite(13, g_indicator);
         g_indicator = !g_indicator;
-
-        g_tunnel.clear();
-
-        if(g_run_mode & MODE_WAVES)
-        {
-            g_wave_sim.emit_wave();
-            update_waves(g_time_accum);
-        }
-        if(g_run_mode & MODE_SPARKLE){ update_sparkling(g_time_accum); }
-
-        g_tunnel.update(delta_time);
 
         // read debug inputs
         process_serial_input();
 
-        // debug output
-        // sprintf(g_serial_buf, "mic-lvl: %d\n", g_mic_peak_to_peak);
-        // Serial.write(g_serial_buf);
+        // do nothing here while debugging
+        if(g_run_mode & MODE_DEBUG){ return; }
+
+        // clear everything to black
+        g_tunnel.clear();
+
+        // run stages depending on current mode
+        if(g_run_mode & MODE_WAVES){ update_waves(g_time_accum); }
+        if(g_run_mode & MODE_SPARKLE){ update_sparkling(g_time_accum); }
+
+        // send new color values to strips
+        g_tunnel.update(delta_time);
 
         // clear time accumulator
         g_time_accum = 0;
@@ -184,7 +202,7 @@ void process_mic_input(uint32_t the_delta_time)
         g_mic_peak_to_peak = max(0, g_mic_peak_to_peak - 2);
 
         // read mic val
-        float v = clamp<float>(g_mic_peak_to_peak / 100.f, 0.f, 1.f);
+        float v = clamp<float>(g_gain * g_mic_peak_to_peak / 80.f, 0.f, 1.f);
         g_mic_lvl = max(g_mic_lvl, v);
     }
 }
