@@ -7,6 +7,8 @@ in a 40ft long shipping cargo container serving as the entrance to the venue.
 people are invited to use this code as a reference for creating their own.
 upload your own programs for the tunnel as you please, open decks.
 
+https://vimeo.com/184361109
+
 hardware used in installation:
 
 - Adafruit Feather M0
