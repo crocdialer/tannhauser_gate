@@ -2,7 +2,7 @@
 #include "utils.h"
 
 //! the default-value will cause no brightness adjustment
-uint8_t g_brightness = 255;
+uint8_t g_brightness = 150;
 
 Tunnel::Tunnel()
 {

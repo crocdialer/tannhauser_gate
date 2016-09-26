@@ -3,8 +3,8 @@
 
 WaveSimulation::WaveSimulation(uint32_t max_num_waves):
 m_track_length(12.f),
-m_decay_secs(8.f),
-m_global_propagation_speed(7.f)
+m_decay_secs(2.f),
+m_global_propagation_speed(15.f)
 {
     m_max_num_waves = max_num_waves;
     m_positions = new float[max_num_waves];
@@ -64,7 +64,7 @@ void WaveSimulation::emit_wave(float the_start_intesity, float the_start_pos)
 float WaveSimulation::intensity_at_position(float the_position)
 {
     float sum = 0.f;
-    float quad_factor = 35.f;
+    float quad_factor = 18.f;
 
     for(uint32_t i = 0; i < m_max_num_waves; i++)
     {

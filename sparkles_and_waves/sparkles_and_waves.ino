@@ -20,12 +20,12 @@ uint32_t g_buf_index = 0;
 
 // mic sampling
 const uint32_t g_mic_sample_window = 50;
-uint32_t g_mic_start_millis = 0;  // start of sample window
-uint32_t g_mic_peak_to_peak = 0;   // peak-to-peak level
 volatile uint32_t g_mic_signal_max = 0;
 volatile uint32_t g_mic_signal_min = ADC_MAX;
+uint32_t g_mic_start_millis = 0;  // start of sample window
+uint32_t g_mic_peak_to_peak = 0;   // peak-to-peak level
 float g_mic_lvl = 0.f; // 0.0 ... 1.0
-float g_gain = 10.f;
+float g_gain = 3.f;
 
 // continuous sampling with timer interrupts and custom ADC settings
 ADC_Sampler g_adc_sampler;
@@ -65,6 +65,8 @@ WaveSimulation g_wave_sim;
 // disabled when set to 0
 int32_t g_random_wave_timer = 1;
 
+uint32_t g_wave_charge_duration = 3000;
+
 const uint32_t g_idle_timeout = 10000;
 
 //! value callback from ADC_Sampler ISR
@@ -80,13 +82,20 @@ void adc_callback(uint32_t the_sample)
 //! interrupt routine for lightbarrier status
 void barrier_ISR()
 {
-     g_barrier_lock = digitalRead(BARRIER_INTERRUPT_PIN);
-     if(g_barrier_lock){ g_barrier_timestamp = millis(); }
+     int new_val = digitalRead(BARRIER_INTERRUPT_PIN);
+
+     // barrier released
+     if(g_barrier_lock && !new_val)
+     {
+         g_barrier_timestamp = millis();
+         g_wave_sim.emit_wave(random<float>(.8f, 1.2f));
+     }
+     g_barrier_lock = new_val;
 }
 
 void update_sparkling(uint32_t the_delta_time)
 {
-    uint32_t num_random_pix = g_mic_lvl * 600/*per sec*/ * the_delta_time / 1000.f;
+    uint32_t num_random_pix = g_mic_lvl * 400/*per sec*/ * the_delta_time / 1000.f;
     g_tunnel.add_random_pixels(num_random_pix, 600);
     // Serial.print("num_random_pix: "); Serial.println(num_random_pix);
 }
@@ -110,7 +119,7 @@ void update_waves(uint32_t the_delta_time)
     }
 
     // g_tunnel.set_brightness(20 + 50 * g_mic_lvl);
-    auto col = Adafruit_NeoPixel::Color(150, 0, 0, g_gamma[40]);
+    auto col = Adafruit_NeoPixel::Color(150, 50, 0, g_gamma[40]);
 
     // start bias for 1st gate in meters
     float pos_x = 0.3;
