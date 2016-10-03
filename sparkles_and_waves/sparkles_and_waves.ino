@@ -65,8 +65,6 @@ WaveSimulation g_wave_sim;
 // disabled when set to 0
 int32_t g_random_wave_timer = 1;
 
-uint32_t g_wave_charge_duration = 3000;
-
 const uint32_t g_idle_timeout = 10000;
 
 //! value callback from ADC_Sampler ISR

@@ -19,6 +19,7 @@ WaveSimulation::~WaveSimulation()
 {
     delete[](m_positions);
     delete[](m_intensities);
+    delete[](m_propagation_speed);
 }
 
 void WaveSimulation::update(uint32_t the_delta_time)
@@ -37,7 +38,6 @@ void WaveSimulation::update(uint32_t the_delta_time)
             {
                 m_positions[i] = new_pos < 0.f ? -new_pos : 2 * m_track_length - new_pos;
                 m_propagation_speed[i] *= -1.f;
-                // m_intensities[i] = 0.f;
             }
             m_intensities[i] -= 1.f / m_decay_secs * delta_secs;
         }
